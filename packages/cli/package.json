@@ -1,0 +1,31 @@
+{
+  "name": "@spellcraft/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "spellcraft": "./dist/index.js"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@spellcraft/core": "workspace:*",
+    "@spellcraft/generators": "workspace:*",
+    "@spellcraft/scry": "workspace:*",
+    "chalk": "^5.4.1",
+    "commander": "^13.1.0",
+    "diff": "^7.0.0",
+    "neverthrow": "^8.1.1",
+    "yaml": "^2.7.0"
+  },
+  "devDependencies": {
+    "@types/diff": "^6.0.0",
+    "tsup": "^8.3.6",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

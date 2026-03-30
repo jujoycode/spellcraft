@@ -1,0 +1,30 @@
+{
+  "name": "@spellcraft/scry",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@spellcraft/core": "workspace:*",
+    "@anthropic-ai/sdk": "^0.39.0",
+    "neverthrow": "^8.1.1",
+    "remeda": "^2.21.0",
+    "ts-pattern": "^5.6.2",
+    "valibot": "^1.0.0"
+  },
+  "devDependencies": {
+    "tsup": "^8.3.6",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8",
+    "yaml": "^2.7.0"
+  }
+}
