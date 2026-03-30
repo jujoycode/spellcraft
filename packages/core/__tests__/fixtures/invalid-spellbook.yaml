@@ -1,0 +1,11 @@
+version: "not-a-number"
+
+project:
+  name: 123
+
+targets:
+  - invalid-target
+
+spells:
+  - id: missing-content
+    description: ""

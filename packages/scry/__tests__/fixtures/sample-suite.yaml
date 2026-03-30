@@ -1,0 +1,29 @@
+version: 1
+
+suite:
+  name: "TypeScript quality test"
+  description: "Basic eval suite"
+
+spellbook: "./spell.yml"
+
+provider:
+  model: "claude-sonnet-4-20250514"
+  maxTokens: 4096
+  temperature: 0
+
+tasks:
+  - id: "hello-world"
+    description: "Create a hello world function"
+    prompt: |
+      Create a function greet(name: string): string that returns
+      "Hello, {name}!" in TypeScript.
+    outputPath: ".scry/generated/hello.ts"
+    tests:
+      - path: "./scry-tests/hello.test.ts"
+        runner: "vitest"
+    staticAnalysis:
+      noAny: true
+      noConsoleLog: true
+
+report:
+  format: "terminal"

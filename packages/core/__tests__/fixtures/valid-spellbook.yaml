@@ -1,0 +1,35 @@
+version: 1
+
+project:
+  name: my-saas
+  description: "B2B SaaS 플랫폼"
+
+targets:
+  - claude
+  - cursor
+  - copilot
+
+tomes:
+  - "@spellcraft/nextjs-app-router"
+
+spells:
+  - id: lang
+    description: "언어 및 프레임워크"
+    globs: ["**/*.ts", "**/*.tsx"]
+    content: |
+      TypeScript strict 모드를 사용한다.
+      any 타입 사용을 금지한다.
+
+  - id: testing
+    description: "테스트 컨벤션"
+    targets: [claude, cursor]
+    content: |
+      vitest를 사용한다.
+      테스트 파일은 __tests__/ 디렉토리에 위치한다.
+
+  - id: db
+    description: "데이터베이스 규칙"
+    targets: [claude]
+    alwaysApply: false
+    content: |
+      Drizzle ORM만 사용한다.
