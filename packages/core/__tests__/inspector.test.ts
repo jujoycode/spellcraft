@@ -73,6 +73,44 @@ describe('checkTokenBudget', () => {
 	});
 });
 
+describe('checkConflicts', () => {
+	it('같은 카테고리 도구를 사용하는 주문 간 충돌을 감지한다', () => {
+		const b = book({
+			spells: [
+				spell({ id: 'a', content: 'jest를 사용한다.', targets: ['claude'] }),
+				spell({ id: 'b', content: 'vitest를 사용한다.', targets: ['claude'] }),
+			],
+		});
+		const diags = checkConflicts(b);
+		expect(diags).toHaveLength(1);
+		expect(diags[0]!.code).toBe('CONFLICT');
+		expect(diags[0]!.message).toContain('jest');
+		expect(diags[0]!.message).toContain('vitest');
+	});
+
+	it('다른 target의 주문은 충돌로 감지하지 않는다', () => {
+		const b = book({
+			spells: [
+				spell({ id: 'a', content: 'jest를 사용한다.', targets: ['claude'] }),
+				spell({ id: 'b', content: 'vitest를 사용한다.', targets: ['cursor'] }),
+			],
+		});
+		const diags = checkConflicts(b);
+		expect(diags).toHaveLength(0);
+	});
+
+	it('같은 카테고리가 아니면 충돌하지 않는다', () => {
+		const b = book({
+			spells: [
+				spell({ id: 'a', content: 'vitest를 사용한다.', targets: ['claude'] }),
+				spell({ id: 'b', content: 'drizzle를 사용한다.', targets: ['claude'] }),
+			],
+		});
+		const diags = checkConflicts(b);
+		expect(diags).toHaveLength(0);
+	});
+});
+
 describe('checkMissingGlobs', () => {
 	it('alwaysApply=false이고 globs가 없으면 info를 반환한다', () => {
 		const b = book({

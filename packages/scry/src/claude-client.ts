@@ -19,9 +19,9 @@ export const createClaudeClient = (
 
 	if (!key) {
 		return err({
-			_tag: 'FileIOError',
-			path: '',
-			cause: 'ANTHROPIC_API_KEY environment variable is not set',
+			_tag: 'ConfigError',
+			key: 'ANTHROPIC_API_KEY',
+			message: 'ANTHROPIC_API_KEY environment variable is not set',
 		});
 	}
 
@@ -44,7 +44,7 @@ export const createClaudeClient = (
 			} catch (cause) {
 				return err({
 					_tag: 'FileIOError',
-					path: '',
+					path: 'anthropic-api',
 					cause: cause instanceof Error ? cause.message : String(cause),
 				});
 			}

@@ -1,9 +1,13 @@
 import type { CustomViolation, StaticAnalysisConfig, StaticAnalysisResult } from './types.js';
 
-/** Count occurrences of `any` type usage (excluding comments) */
+/** Count occurrences of `any` type usage (type annotations: `: any`, `<any>`, `as any`) */
 export const countAnyUsage = (source: string): number => {
-	const matches = source.match(/\bany\b/g);
-	return matches?.length ?? 0;
+	const patterns = [
+		/:\s*any\b/g,
+		/<any\b/g,
+		/\bas\s+any\b/g,
+	];
+	return patterns.reduce((sum, pattern) => sum + (source.match(pattern)?.length ?? 0), 0);
 };
 
 /** Count console.log/warn/error calls */

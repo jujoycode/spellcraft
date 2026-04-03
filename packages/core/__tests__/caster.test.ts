@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { type FormatFn, castAll, castForTarget, filterSpellsForTarget } from '../src/caster.js';
-import type { Spell, SpellId, Spellbook, Target } from '../src/types.js';
+import type { CastFile, Spell, SpellId, Spellbook, Target } from '../src/types.js';
 
 const spell = (overrides: Partial<Spell> & { id: string }): Spell => ({
 	id: overrides.id as SpellId,
@@ -20,10 +20,12 @@ const book = (overrides: Partial<Spellbook> = {}): Spellbook => ({
 	overrides: {},
 });
 
-const simpleFormat: FormatFn = (project, spells, _target) => ({
-	filePath: 'output.md',
-	content: spells.map((s) => s.content).join('\n'),
-});
+const simpleFormat: FormatFn = (_project, spells, _target): readonly CastFile[] => [
+	{
+		filePath: 'output.md',
+		content: spells.map((s) => s.content).join('\n'),
+	},
+];
 
 describe('filterSpellsForTarget', () => {
 	it('target이 비어있는 spell은 모든 target에 적용된다', () => {
@@ -54,7 +56,8 @@ describe('castForTarget', () => {
 		});
 		const output = castForTarget(b, 'claude', simpleFormat);
 		expect(output.spellsCast).toEqual(['a']);
-		expect(output.content).toBe('A');
+		expect(output.files).toHaveLength(1);
+		expect(output.files[0]!.content).toBe('A');
 	});
 
 	it('토큰 수를 포함한다', () => {
@@ -74,9 +77,23 @@ describe('castAll', () => {
 			['claude', simpleFormat],
 			['cursor', simpleFormat],
 		]);
-		const outputs = castAll(b, formatters);
+		const result = castAll(b, formatters);
+		expect(result.isOk()).toBe(true);
+		const outputs = result._unsafeUnwrap();
 		expect(outputs).toHaveLength(2);
 		expect(outputs[0]!.target).toBe('claude');
 		expect(outputs[1]!.target).toBe('cursor');
+	});
+
+	it('formatter가 누락되면 ConfigError를 반환한다', () => {
+		const b = book({
+			targets: ['claude', 'cursor'] as readonly Target[],
+			spells: [spell({ id: 'x', content: 'X' })],
+		});
+		const formatters = new Map<Target, FormatFn>([['claude', simpleFormat]]);
+		const result = castAll(b, formatters);
+		expect(result.isErr()).toBe(true);
+		const error = result._unsafeUnwrapErr();
+		expect(error._tag).toBe('ConfigError');
 	});
 });

@@ -1,3 +1,4 @@
+import { match } from 'ts-pattern';
 import type { Diagnostic, SpellId, Spellbook } from './types.js';
 import { estimateTokens } from './tokens.js';
 
@@ -17,81 +18,80 @@ const VAGUE_PATTERNS = [
 
 const DEFAULT_TOKEN_BUDGET = 8000;
 
+const TOOL_CATEGORIES: readonly (readonly string[])[] = [
+	['jest', 'vitest', 'mocha', 'ava'],
+	['drizzle', 'prisma', 'typeorm', 'sequelize'],
+	['express', 'hono', 'fastify', 'koa'],
+	['npm', 'pnpm', 'yarn', 'bun'],
+];
+
 export const checkVagueness: InspectRule = (book) =>
-	book.spells.flatMap((spell) => {
-		const found = VAGUE_PATTERNS.filter((p) =>
-			spell.content.toLowerCase().includes(p.toLowerCase()),
-		);
-		return found.map(
+	book.spells.flatMap((spell) =>
+		VAGUE_PATTERNS.filter((p) => spell.content.toLowerCase().includes(p.toLowerCase())).map(
 			(p): Diagnostic => ({
 				severity: 'warn',
 				spellId: spell.id,
 				code: 'VAGUE',
 				message: `"${p}"은 측정 불가능한 표현입니다. 구체적 기준을 명시하세요.`,
 			}),
-		);
-	});
+		),
+	);
+
+/** Extract tool names mentioned via "X를 사용" or "use X" patterns */
+const extractToolMentions = (content: string): readonly string[] => {
+	const lower = content.toLowerCase();
+	const korean = [...lower.matchAll(/(\w+)(?:를|을)?\s*사용/g)].map((m) => m[1] ?? '');
+	const english = [...lower.matchAll(/(?:use|using)\s+(\w+)/g)].map((m) => m[1] ?? '');
+	return [...korean, ...english].filter((t) => t.length > 0);
+};
+
+/** Check if two tools are in the same category */
+const isSameCategory = (a: string, b: string): boolean =>
+	TOOL_CATEGORIES.some(
+		(cat) => cat.includes(a.toLowerCase()) && cat.includes(b.toLowerCase()),
+	);
+
+/** Find conflicting tool pairs between two tool lists */
+const findConflictingPair = (
+	toolsA: readonly string[],
+	toolsB: readonly string[],
+): readonly [string, string][] =>
+	toolsA.flatMap((a) =>
+		toolsB
+			.filter((b) => a !== b && isSameCategory(a, b))
+			.map((b): [string, string] => [a, b]),
+	);
+
+/** Check if two spells share targets (or both are global) */
+const hasOverlappingTargets = (
+	a: { readonly targets: readonly string[] },
+	b: { readonly targets: readonly string[] },
+): boolean =>
+	(a.targets.length === 0 && b.targets.length === 0) ||
+	a.targets.some((t) => b.targets.includes(t));
+
+/** Generate all unique pairs from a list */
+const pairs = <T>(items: readonly T[]): readonly [T, T][] =>
+	items.flatMap((a, i) => items.slice(i + 1).map((b): [T, T] => [a, b]));
 
 /** Find spells with overlapping targets and contradicting content keywords */
-export const checkConflicts: InspectRule = (book) => {
-	const diagnostics: Diagnostic[] = [];
-	const { spells } = book;
+export const checkConflicts: InspectRule = (book) =>
+	pairs(book.spells)
+		.filter(([a, b]) => hasOverlappingTargets(a, b))
+		.flatMap(([a, b]) => {
+			const toolsA = extractToolMentions(a.content);
+			const toolsB = extractToolMentions(b.content);
+			const conflicts = findConflictingPair(toolsA, toolsB);
 
-	for (let i = 0; i < spells.length; i++) {
-		for (let j = i + 1; j < spells.length; j++) {
-			const a = spells[i]!;
-			const b = spells[j]!;
-			const sharedTargets = a.targets.filter((t) => b.targets.includes(t));
-			const bothGlobal = a.targets.length === 0 && b.targets.length === 0;
-
-			if (sharedTargets.length === 0 && !bothGlobal) continue;
-
-			const conflict = detectContentConflict(a.content, b.content);
-			if (conflict) {
-				diagnostics.push({
+			return conflicts.map(
+				([toolA, toolB]): Diagnostic => ({
 					severity: 'error',
 					spellId: a.id,
 					code: 'CONFLICT',
-					message: `"${a.id}"와 "${b.id}"가 충돌합니다: ${conflict}`,
-				});
-			}
-		}
-	}
-
-	return diagnostics;
-};
-
-/** Simple conflict detection: check for opposing statements about same tools */
-const detectContentConflict = (contentA: string, contentB: string): string | null => {
-	const aLower = contentA.toLowerCase();
-	const bLower = contentB.toLowerCase();
-
-	const usedInA = [...aLower.matchAll(/(\w+)(?:를|을)?\s*사용/g)].map((m) => m[1]);
-	const usedInB = [...bLower.matchAll(/(\w+)(?:를|을)?\s*사용/g)].map((m) => m[1]);
-
-	for (const toolA of usedInA) {
-		if (toolA && bLower.includes(`${toolA}`) && aLower.includes(`${toolA}`) && usedInB.some((t) => t !== toolA && isSameCategory(toolA, t ?? ''))) {
-			const conflicting = usedInB.find((t) => t !== toolA && isSameCategory(toolA, t ?? ''));
-			if (conflicting) {
-				return `같은 카테고리 도구: ${toolA} vs ${conflicting}`;
-			}
-		}
-	}
-
-	return null;
-};
-
-/** Check if two tools are in the same category (test runners, ORMs, etc.) */
-const isSameCategory = (a: string, b: string): boolean => {
-	const categories = [
-		['jest', 'vitest', 'mocha', 'ava'],
-		['drizzle', 'prisma', 'typeorm', 'sequelize'],
-		['express', 'hono', 'fastify', 'koa'],
-		['npm', 'pnpm', 'yarn', 'bun'],
-	];
-
-	return categories.some((cat) => cat.includes(a.toLowerCase()) && cat.includes(b.toLowerCase()));
-};
+					message: `"${a.id}"와 "${b.id}"가 충돌합니다: 같은 카테고리 도구 ${toolA} vs ${toolB}`,
+				}),
+			);
+		});
 
 export const checkTokenBudget: InspectRule = (book) =>
 	book.targets.flatMap((target) => {
@@ -115,16 +115,19 @@ export const checkTokenBudget: InspectRule = (book) =>
 
 export const checkMissingGlobs: InspectRule = (book) =>
 	book.spells.flatMap((spell) =>
-		!spell.alwaysApply && spell.globs.length === 0
-			? [
+		match(spell)
+			.when(
+				(s) => !s.alwaysApply && s.globs.length === 0,
+				(s): readonly Diagnostic[] => [
 					{
-						severity: 'info' as const,
-						spellId: spell.id,
+						severity: 'info',
+						spellId: s.id,
 						code: 'MISSING_GLOBS',
-						message: `"${spell.id}"는 alwaysApply=false이지만 globs가 비어 있습니다.`,
+						message: `"${s.id}"는 alwaysApply=false이지만 globs가 비어 있습니다.`,
 					},
-				]
-			: [],
+				],
+			)
+			.otherwise((): readonly Diagnostic[] => []),
 	);
 
 export const inspectAll: InspectRule = (book) =>

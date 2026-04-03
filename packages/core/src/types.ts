@@ -28,10 +28,14 @@ export interface Spellbook {
 	readonly extends?: string;
 }
 
-export interface CastOutput {
-	readonly target: Target;
+export interface CastFile {
 	readonly filePath: string;
 	readonly content: string;
+}
+
+export interface CastOutput {
+	readonly target: Target;
+	readonly files: readonly CastFile[];
 	readonly tokenCount: number;
 	readonly spellsCast: readonly SpellId[];
 }
@@ -63,4 +67,5 @@ export type SpellcraftError =
 			readonly reason: string;
 	  }
 	| { readonly _tag: 'FileIOError'; readonly path: string; readonly cause: unknown }
-	| { readonly _tag: 'SchemaError'; readonly violations: readonly string[] };
+	| { readonly _tag: 'SchemaError'; readonly violations: readonly string[] }
+	| { readonly _tag: 'ConfigError'; readonly key: string; readonly message: string };

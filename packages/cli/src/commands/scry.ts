@@ -1,6 +1,8 @@
 import { resolve, dirname } from 'node:path';
+import { pipe } from 'remeda';
+import { match } from 'ts-pattern';
 import { castForTarget, parseSpellbook } from '@spellcraft/core';
-import type { FormatFn } from '@spellcraft/core';
+import type { CastFile, FormatFn } from '@spellcraft/core';
 import { getGenerator } from '@spellcraft/generators';
 import {
 	parseScrySuite,
@@ -67,20 +69,18 @@ export const scryCommand = async (suitePath: string): Promise<void> => {
 		return;
 	}
 
-	const format: FormatFn = (project, spells, _target) => {
-		const outputs = gen.generate(project, spells);
-		return {
-			filePath: outputs[0]?.filePath ?? 'CLAUDE.md',
-			content: outputs.map((o) => o.content).join('\n'),
-		};
-	};
+	const format: FormatFn = (project, spells, _target): readonly CastFile[] =>
+		gen.generate(project, spells).map((o) => ({ filePath: o.filePath, content: o.content }));
 
 	const castOutput = castForTarget(book, 'claude', format);
+	const systemPrompt = castOutput.files.map((f) => f.content).join('\n');
 
 	// 4. Create Claude client
 	const clientResult = createClaudeClient(suite.provider);
 	if (clientResult.isErr()) {
-		logger.error(String(clientResult.error.cause));
+		match(clientResult.error)
+			.with({ _tag: 'ConfigError' }, (e) => logger.error(e.message))
+			.otherwise((e) => logger.error(String(e._tag)));
 		process.exitCode = 1;
 		return;
 	}
@@ -96,7 +96,7 @@ export const scryCommand = async (suitePath: string): Promise<void> => {
 		logger.info(`Task: ${task.id}`);
 
 		// With spells
-		const withPrompt = buildWithSpellsPrompt(castOutput.content, task);
+		const withPrompt = buildWithSpellsPrompt(systemPrompt, task);
 		const withResponse = await client.call(withPrompt.system, withPrompt.user);
 		if (withResponse.isErr()) {
 			logger.error(`API call failed (with spells): ${String(withResponse.error.cause)}`);
@@ -119,9 +119,13 @@ export const scryCommand = async (suitePath: string): Promise<void> => {
 		const withoutOutputPath = resolve(suiteDir, '.scry/generated-without', `${task.id}.ts`);
 		await writeOutput(withoutOutputPath, withoutCode);
 
-		// Run tests
+		// Run tests for "with spells" variant (code already at outputPath)
 		const withTests = await runTests(task.tests, suiteDir);
+
+		// Swap: write "without" code to outputPath, run tests, then restore
+		await writeOutput(withOutputPath, withoutCode);
 		const withoutTests = await runTests(task.tests, suiteDir);
+		await writeOutput(withOutputPath, withCode);
 
 		// Static analysis
 		const withStatic = analyzeStatic(withCode, task.staticAnalysis);
@@ -158,23 +162,22 @@ export const scryCommand = async (suitePath: string): Promise<void> => {
 	}
 
 	// 6. Build report
-	const improved = taskResults.filter((r) => r.delta.verdict === 'improved').length;
-	const degraded = taskResults.filter((r) => r.delta.verdict === 'degraded').length;
-	const neutral = taskResults.filter((r) => r.delta.verdict === 'neutral').length;
-	const avgTestDelta =
-		taskResults.reduce((sum, r) => sum + r.delta.testPassRateDelta, 0) / (taskResults.length || 1);
-	const avgStaticDelta =
-		taskResults.reduce((sum, r) => sum + r.delta.staticScoreDelta, 0) / (taskResults.length || 1);
-
-	const summary: ScryReportSummary = {
-		totalTasks: taskResults.length,
-		improved,
-		neutral,
-		degraded,
-		averageTestDelta: avgTestDelta,
-		averageStaticDelta: avgStaticDelta,
-		overallVerdict: improved > degraded ? 'improved' : degraded > improved ? 'degraded' : 'neutral',
-	};
+	const summary: ScryReportSummary = pipe(
+		taskResults,
+		(results) => ({
+			totalTasks: results.length,
+			improved: results.filter((r) => r.delta.verdict === 'improved').length,
+			neutral: results.filter((r) => r.delta.verdict === 'neutral').length,
+			degraded: results.filter((r) => r.delta.verdict === 'degraded').length,
+			averageTestDelta: results.reduce((sum, r) => sum + r.delta.testPassRateDelta, 0) / (results.length || 1),
+			averageStaticDelta: results.reduce((sum, r) => sum + r.delta.staticScoreDelta, 0) / (results.length || 1),
+			overallVerdict: (() => {
+				const imp = results.filter((r) => r.delta.verdict === 'improved').length;
+				const deg = results.filter((r) => r.delta.verdict === 'degraded').length;
+				return imp > deg ? 'improved' as const : deg > imp ? 'degraded' as const : 'neutral' as const;
+			})(),
+		}),
+	);
 
 	const report: ScryReport = {
 		suite: suite.suite.name,

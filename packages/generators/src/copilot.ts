@@ -1,15 +1,6 @@
 import type { ProjectMeta, Spell } from '@spellcraft/core';
 import type { Generator, GeneratorOutput } from './types.js';
-
-const formatMarkdown = (project: ProjectMeta, spells: readonly Spell[]): string => {
-	const header = project.description
-		? `# Project: ${project.name}\n\n${project.description}`
-		: `# Project: ${project.name}`;
-
-	const sections = spells.map((spell) => `## ${spell.description}\n\n${spell.content}`);
-
-	return [header, '', ...sections].join('\n');
-};
+import { formatMarkdown } from './format-markdown.js';
 
 export const copilotGenerator: Generator = {
 	target: 'copilot',

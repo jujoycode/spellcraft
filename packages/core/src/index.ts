@@ -1,4 +1,5 @@
 export type {
+	CastFile,
 	CastOutput,
 	Diagnostic,
 	DriftChange,
